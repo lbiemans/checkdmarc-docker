@@ -77,15 +77,6 @@ class _SPFDuplicateInclude(_SPFWarning):
 class SPFRecordNotFound(SPFError):
     """Raised when an SPF record could not be found"""
 
-    def __init__(self, error, domain):
-        if isinstance(error, dns.exception.Timeout):
-            error.kwargs["timeout"] = round(error.kwargs["timeout"], 1)
-        self.error = error
-        self.domain = domain
-
-    def __str__(self):
-        return f"{self.domain}: {str(self.error)}"
-
 
 class MultipleSPFRTXTRecords(SPFError):
     """Raised when multiple TXT spf1 records are found"""
@@ -463,16 +454,13 @@ def parse_spf_record(
                     )
 
                 # RFC 7208 § 4.6.4: no more than 10 DNS queries total per evaluation
-                if len(mx_hosts) > 9:
+                if len(mx_hosts) > 10:
                     raise SPFTooManyDNSLookups(
-                        f"{value} has more than 9 MX records - " "(RFC 7208 § 4.6.4)",
+                        f"{value} has more than 10 MX records - " "(RFC 7208 § 4.6.4)",
                         dns_lookups=len(mx_hosts),
                     )
                 host_ips = {}
                 for host in mx_hosts:
-                    # count one DNS query per MX target
-                    mechanism_dns_lookups += 1
-                    total_dns_lookups += 1
                     hostname = host["hostname"]
                     # --- perform A/AAAA resolution for each MX host ---
                     try:
@@ -758,6 +746,16 @@ def parse_spf_record(
             if isinstance(warning, (_SPFMissingRecords, DNSExceptionNXDOMAIN)):
                 mechanism_void_dns_lookups += 1
                 total_void_dns_lookups += 1
+                mechanism = OrderedDict(
+                    [
+                        ("mechanism", mechanism),
+                        ("value", value),
+                        ("record", None),
+                        ("dns_lookups", 1),
+                        ("void_dns_lookups", 1),
+                    ]
+                )
+                parsed["mechanisms"].append(mechanism)
                 if total_void_dns_lookups > 2:
                     raise SPFTooManyVoidDNSLookups(
                         "Parsing the SPF record has "
@@ -765,7 +763,7 @@ def parse_spf_record(
                         "lookups (RFC 7208 § 4.6.4)",
                         void_dns_lookups=total_void_dns_lookups,
                     )
-            warnings.append(str(warning))
+            warnings.append(f"{value}: {str(warning)}")
 
     if error:
         result = OrderedDict(
@@ -819,11 +817,20 @@ def get_spf_record(
     """
     domain = normalize_domain(domain)
     record = query_spf_record(
-        domain, nameservers=nameservers, resolver=resolver, timeout=timeout
+        domain,
+        nameservers=nameservers,
+        resolver=resolver,
+        timeout=timeout,
+        timeout_retries=timeout_retries,
     )
     record = record["record"]
     parsed_record = parse_spf_record(
-        record, domain, nameservers=nameservers, resolver=resolver, timeout=timeout
+        record,
+        domain,
+        nameservers=nameservers,
+        resolver=resolver,
+        timeout=timeout,
+        timeout_retries=timeout_retries,
     )
     parsed_record["record"] = record
     return parsed_record

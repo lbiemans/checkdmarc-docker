@@ -1,5 +1,29 @@
 # Changelog
 
+## 5.2.21
+
+- Fix typo in the DMARC record does not exist error message (Closes #195)
+
+## 5.2.20
+
+- Don't overcount lookups caused by the `mx` mechanism (Closes #197)
+
+## 5.2.19
+
+- Make warning text consistent
+
+## 5.2.18
+
+- Fix void `a` SPF mechanism lookup output
+
+## 5.12.17
+
+- Fix crash on DNS retry
+
+## 5.12.16
+
+- Fix crash on DNS retry
+
 ## 5.12.15
 
 - Fix bug in MX TLSA detection introduced in `5.12.13`
